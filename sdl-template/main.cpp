@@ -36,6 +36,18 @@ void RenderDrawCircle(SDL_Renderer * renderer,
 	}
 }
 
+std::vector<object_2d*> GetOverlapping(std::vector<object_2d>& objects, vec2& point)
+{
+	std::vector<object_2d*> overlap;
+	for(auto& o : objects)
+	{
+		vec2 d = point - o.position;
+		if (length(d) < o.radius)
+			overlap.push_back(&o);
+	}
+	return overlap;
+}
+
 int main(int argc, char** argv)
 {
 	SDL_Window* window = NULL;
@@ -83,12 +95,34 @@ int main(int argc, char** argv)
 			if (event.type == SDL_QUIT)
 				quit = true;
 
+		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+		SDL_RenderClear(renderer);
+
 		for (auto& o : objects)
 		{
 			SDL_SetRenderDrawColor(renderer, o.color.r, o.color.g, o.color.b, 255);
 			RenderDrawCircle(renderer, o.position, o.radius);
 		}
 
+		int x;
+		int y;
+		SDL_GetMouseState(&x, &y);
+		auto mouse = vec2(x, y);
+
+		// Measure the time for this call and make it faster. You can output the value in the title of the window
+		auto overlap = GetOverlapping(objects, mouse);
+		
+		for (auto& o : overlap)
+		{
+			SDL_SetRenderDrawColor(renderer, o->color.r, o->color.g, o->color.b, 255);
+			RenderDrawCircle(renderer, o->position, o->radius+0.8f);
+			RenderDrawCircle(renderer, o->position, o->radius-0.8f);
+			RenderDrawCircle(renderer, o->position, o->radius+1.6f);
+			RenderDrawCircle(renderer, o->position, o->radius-1.6f);
+		}
+		
+		RenderDrawCircle(renderer, mouse,6.0f);
+		
 		SDL_RenderPresent(renderer);
 		SDL_Delay(1000 / 30);
 	}
