@@ -3,6 +3,8 @@
 #include <glm.hpp>
 #include <vector>
 #include "source/defines.h"
+#include <chrono>
+#include <string>
 
 const float pi = 3.14159265359f;
 const int w = 1280;
@@ -48,6 +50,60 @@ std::vector<object_2d*> GetOverlapping(std::vector<object_2d>& objects, vec2& po
 	return overlap;
 }
 
+struct aabb
+{
+	vec2 min;
+	vec2 max;
+
+	aabb() : min(FLT_MAX, FLT_MAX), max(-FLT_MAX, -FLT_MAX) {}
+	aabb(vec2 min, vec2 max) : min(min), max(max) {}
+	void add(const object_2d& object);
+	void add(const aabb& aabb);
+//	bool IsValid() const;
+};
+
+void aabb::add(const object_2d& object)
+{
+	vec2 ex(object.radius, object.radius);
+	aabb object_bb;
+	object_bb.min = object.position - ex;
+	object_bb.max = object.position + ex;
+	add(object_bb);
+}
+
+void aabb::add(const aabb& aabb)
+{
+	if (aabb.max.x > max.x)
+		max.x = aabb.max.x;
+	if (aabb.min.x < min.x)
+		min.x = aabb.min.x;
+	
+	if (aabb.max.y > max.y)
+		max.y = aabb.max.y;
+	if (aabb.min.y < min.y)
+		min.y = aabb.min.y;
+}
+
+class BVH
+{
+public:
+	BVH(const std::vector<object_2d>& bodies) {}
+	void GetBroadPhase(const object_2d& body, std::vector<object_2d*>& broadPhase);
+
+private:
+	void Recurse(size_t from, size_t to, size_t parent, uint depth);
+	struct BVHNode
+	{
+		object_2d* object = nullptr;
+		aabb bounding_box;
+	};
+
+	void GetBroadPhase(const object_2d& body, std::vector<object_2d*>& broadPhase, int parent);
+
+	std::vector<BVHNode>	_volumes;
+	std::vector<object_2d>	_bodies;
+};
+
 int main(int argc, char** argv)
 {
 	SDL_Window* window = NULL;
@@ -68,7 +124,7 @@ int main(int argc, char** argv)
 	SDL_RenderClear(renderer);
 
 	std::vector<object_2d> objects;
-	for(int i = 0; i < 255; i++)
+	for(int i = 0; i < 4000; i++)
 	{
 		const Uint8 r = Uint8(rand_in_range(128, 255));
 		const Uint8 g = Uint8(rand_in_range(128, 255));
@@ -110,7 +166,13 @@ int main(int argc, char** argv)
 		auto mouse = vec2(x, y);
 
 		// Measure the time for this call and make it faster. You can output the value in the title of the window
+		auto t1 = std::chrono::high_resolution_clock::now();
 		auto overlap = GetOverlapping(objects, mouse);
+		auto t2 = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+
+		string name = "Cast time: " + std::to_string(duration);
+		SDL_SetWindowTitle(window, name.c_str());
 		
 		for (auto& o : overlap)
 		{
