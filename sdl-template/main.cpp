@@ -5,6 +5,7 @@
 #include "source/defines.h"
 #include <chrono>
 #include <string>
+#include <algorithm>
 
 const float pi = 3.14159265359f;
 const int w = 1280;
@@ -38,6 +39,30 @@ void RenderDrawCircle(SDL_Renderer * renderer,
 	}
 }
 
+void RenderBox(vec2 min, vec2 max)
+{
+	vec2 A(min.x, min.y);
+	vec2 B(max.x, min.y);
+	vec2 D(Min.x - offset, 0.0f, Max.y + offset);
+	vec2 C(Max.x + offset, 0.0f, Max.y + offset);
+	gDebugRenderer.AddLine(DebugRenderer::PHYSICS, A, B, color);
+	gDebugRenderer.AddLine(DebugRenderer::PHYSICS, B, C, color);
+	gDebugRenderer.AddLine(DebugRenderer::PHYSICS, C, D, color);
+	gDebugRenderer.AddLine(DebugRenderer::PHYSICS, D, A, color);
+	const int n = 12;
+	float t = 0.0f;
+	const float dt = 2.0f * pi / float(n);
+	for (int i = 0; i < n; i++)
+	{
+		SDL_RenderDrawLine(renderer,
+			int(center.x + cos(t) * radius),
+			int(center.y + sin(t) * radius),
+			int(center.x + cos(t + dt) * radius),
+			int(center.y + sin(t + dt) * radius));
+		t += dt;
+	}
+}
+
 std::vector<object_2d*> GetOverlapping(std::vector<object_2d>& objects, vec2& point)
 {
 	std::vector<object_2d*> overlap;
@@ -59,7 +84,6 @@ struct aabb
 	aabb(vec2 min, vec2 max) : min(min), max(max) {}
 	void add(const object_2d& object);
 	void add(const aabb& aabb);
-//	bool IsValid() const;
 };
 
 void aabb::add(const object_2d& object)
@@ -84,25 +108,93 @@ void aabb::add(const aabb& aabb)
 		min.y = aabb.min.y;
 }
 
-class BVH
+class bvh
 {
 public:
-	BVH(const std::vector<object_2d>& bodies) {}
-	void GetBroadPhase(const object_2d& body, std::vector<object_2d*>& broadPhase);
-
-private:
-	void Recurse(size_t from, size_t to, size_t parent, uint depth);
-	struct BVHNode
+	bvh(std::vector<object_2d>& bodies);
+	// void get_broad_phase(const object_2d& body, std::vector<object_2d*>& broadPhase);
+	void draw();
+private:	
+	struct bvh_node
 	{
-		object_2d* object = nullptr;
-		aabb bounding_box;
+		object_2d* object		= nullptr;
+		aabb bounding_box;		
+		bvh_node* left			= nullptr;
+		bvh_node* right			= nullptr;
 	};
+	void recurse(size_t from, size_t to, bvh_node* parent, int depth);
+	void draw(bvh_node* node);
 
-	void GetBroadPhase(const object_2d& body, std::vector<object_2d*>& broadPhase, int parent);
+	//void get_broad_phase(const object_2d& body, std::vector<object_2d*>& broadPhase, int parent);
 
-	std::vector<BVHNode>	_volumes;
-	std::vector<object_2d>	_bodies;
+	bvh_node*				_root		= nullptr;
+	std::vector<object_2d*>	_bodies;
 };
+
+bvh::bvh(std::vector<object_2d>& bodies)
+{
+	_bodies.reserve(bodies.size());
+	for (auto& b : bodies)
+		_bodies.push_back(&b);
+
+	_root = new bvh_node();
+	recurse(0, _bodies.size() - 1, _root, 0);
+}
+
+void bvh::draw()
+{
+	draw(_root);
+}
+
+void bvh::recurse(size_t from, size_t to, bvh_node* parent, int depth)
+{
+	if (from >= to)
+	{
+		parent->object = _bodies[from];
+		parent->bounding_box.add(*parent->object);
+	}
+	else
+	{
+		static auto sort_x = [](object_2d* body0, object_2d* body1)
+		{ return body0->position.x > body1->position.x; };
+
+		static auto sort_y = [](object_2d* body0, object_2d* body1)
+		{ return body0->position.y > body1->position.y; };
+
+		if (depth % 2)
+			sort(_bodies.begin() + from, _bodies.begin() + to, sort_x);
+		else
+			sort(_bodies.begin() + from, _bodies.begin() + to, sort_y);
+
+		parent->left = new bvh_node();
+		parent->right = new bvh_node();
+		const auto len = to - from;
+		recurse(from, from + len / 2, parent->left, depth + 1);
+		recurse(from + len / 2 + 1, to, parent->right, depth + 1);
+
+		parent->bounding_box.add(parent->left->bounding_box);
+		parent->bounding_box.add(parent->right->bounding_box);
+	}
+}
+
+void bvh::draw(bvh_node* node)
+{
+	node->bounding_box;
+
+	Vector3 A(Min.x - offset, 0.0f, Min.y - offset);
+	Vector3 B(Max.x + offset, 0.0f, Min.y - offset);
+	Vector3 D(Min.x - offset, 0.0f, Max.y + offset);
+	Vector3 C(Max.x + offset, 0.0f, Max.y + offset);
+	gDebugRenderer.AddLine(DebugRenderer::PHYSICS, A, B, color);
+	gDebugRenderer.AddLine(DebugRenderer::PHYSICS, B, C, color);
+	gDebugRenderer.AddLine(DebugRenderer::PHYSICS, C, D, color);
+	gDebugRenderer.AddLine(DebugRenderer::PHYSICS, D, A, color);
+
+	if (node->left)
+		draw(node->left);
+	if (node->right)
+		draw(node->right);
+}
 
 int main(int argc, char** argv)
 {
